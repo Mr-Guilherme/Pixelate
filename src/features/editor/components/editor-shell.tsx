@@ -167,10 +167,12 @@ export function EditorShell(): React.JSX.Element {
               selectedIds={editor.state.document.selectedIds}
               pendingDraft={editor.state.document.pendingDraft}
               tool={editor.state.tool}
+              style={editor.state.style}
               styleLineWidth={editor.state.style.lineWidth}
               placingIds={editor.state.placingIds}
               onSelection={editor.setSelection}
               onPendingShape={editor.setPendingShape}
+              onAddObject={editor.addObject}
               onObjectsTransient={editor.setObjectsTransient}
               onCommit={editor.commitObjects}
               onClearPlacing={editor.clearPlacing}

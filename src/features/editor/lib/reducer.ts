@@ -35,6 +35,7 @@ export type EditorAction =
   | { type: "setStyle"; style: StyleParams }
   | { type: "setSelection"; selectedIds: string[] }
   | { type: "setPendingDraft"; draft: RedactionObject | null }
+  | { type: "appendObject"; object: RedactionObject }
   | { type: "setObjectsTransient"; objects: RedactionObject[] }
   | {
       type: "commitObjects";
@@ -174,6 +175,19 @@ export function editorReducer(
         objects: cloneObjects(action.objects),
       },
     };
+  }
+
+  if (action.type === "appendObject") {
+    const before = cloneObjects(state.document.objects);
+    const after = [...before, structuredClone(action.object)];
+
+    return withHistoryCommand({
+      state,
+      before,
+      after,
+      command: "add",
+      selectedIds: [action.object.id],
+    });
   }
 
   if (action.type === "commitObjects") {

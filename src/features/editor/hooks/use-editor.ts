@@ -125,6 +125,10 @@ export function useEditor() {
     dispatch({ type: "setObjectsTransient", objects });
   }, []);
 
+  const addObject = useCallback((object: RedactionObject) => {
+    dispatch({ type: "appendObject", object });
+  }, []);
+
   const commitObjects = useCallback(
     (params: {
       before: RedactionObject[];
@@ -236,6 +240,7 @@ export function useEditor() {
     setPendingShape,
     cancelPending,
     setObjectsTransient,
+    addObject,
     commitObjects,
     deleteSelected,
     undo,

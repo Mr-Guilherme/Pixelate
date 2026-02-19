@@ -7,6 +7,7 @@ import type {
   CommandType,
   ImageModel,
   RedactionObject,
+  StyleParams,
   ToolType,
 } from "@/features/editor/types/editor.types";
 
@@ -21,10 +22,12 @@ export function CanvasViewport(params: {
   selectedIds: string[];
   pendingDraft: RedactionObject | null;
   tool: ToolType;
+  style: StyleParams;
   styleLineWidth: number;
   placingIds: string[];
   onSelection: (ids: string[]) => void;
   onPendingShape: (shape: RedactionObject["shape"] | null) => void;
+  onAddObject: (object: RedactionObject) => void;
   onObjectsTransient: (objects: RedactionObject[]) => void;
   onCommit: (data: {
     before: RedactionObject[];
@@ -79,6 +82,7 @@ export function CanvasViewport(params: {
     canvas: overlayCanvasRef.current,
     imageLoaded: Boolean(params.image),
     tool: params.tool,
+    style: params.style,
     styleLineWidth: params.styleLineWidth,
     transform,
     objects: params.objects,
@@ -87,6 +91,7 @@ export function CanvasViewport(params: {
     placingIds: params.placingIds,
     onSelection: params.onSelection,
     onPendingShape: params.onPendingShape,
+    onAddObject: params.onAddObject,
     onObjectsTransient: params.onObjectsTransient,
     onCommit: params.onCommit,
     onClearPlacing: params.onClearPlacing,

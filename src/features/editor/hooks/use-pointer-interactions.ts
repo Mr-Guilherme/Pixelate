@@ -16,6 +16,7 @@ import type {
   Point,
   RedactionObject,
   ResizeHandle,
+  StyleParams,
   ToolType,
   ViewportTransform,
 } from "@/features/editor/types/editor.types";
@@ -25,7 +26,7 @@ interface DrawingSession {
   tool: ToolType;
   start: Point;
   points: Point[];
-  before: RedactionObject[];
+  draftShape: RedactionObject["shape"];
 }
 
 interface MovingSession {
@@ -66,6 +67,7 @@ export function usePointerInteractions(params: {
   canvas: HTMLCanvasElement | null;
   imageLoaded: boolean;
   tool: ToolType;
+  style: StyleParams;
   styleLineWidth: number;
   transform: ViewportTransform | null;
   objects: RedactionObject[];
@@ -74,6 +76,7 @@ export function usePointerInteractions(params: {
   placingIds: string[];
   onSelection: (ids: string[]) => void;
   onPendingShape: (shape: RedactionObject["shape"] | null) => void;
+  onAddObject: (object: RedactionObject) => void;
   onObjectsTransient: (objects: RedactionObject[]) => void;
   onCommit: (data: {
     before: RedactionObject[];
@@ -116,33 +119,35 @@ export function usePointerInteractions(params: {
       params.onSelection([]);
 
       if (params.tool === "freehand") {
+        const shape = createFreehandShape([point, point]);
+
         interactionRef.current = {
           kind: "drawing",
           tool: "freehand",
           start: point,
           points: [point],
-          before: cloneObjects(params.objects),
+          draftShape: shape,
         };
-        params.onPendingShape(createFreehandShape([point, point]));
+        params.onPendingShape(shape);
         setCursor("crosshair");
         return;
       }
+
+      const shape = createShapeFromPoints({
+        tool: params.tool,
+        start: point,
+        current: point,
+        lineWidth: params.styleLineWidth,
+      });
 
       interactionRef.current = {
         kind: "drawing",
         tool: params.tool,
         start: point,
         points: [],
-        before: cloneObjects(params.objects),
+        draftShape: shape,
       };
-      params.onPendingShape(
-        createShapeFromPoints({
-          tool: params.tool,
-          start: point,
-          current: point,
-          lineWidth: params.styleLineWidth,
-        }),
-      );
+      params.onPendingShape(shape);
       setCursor("crosshair");
       return;
     }
@@ -251,18 +256,20 @@ export function usePointerInteractions(params: {
           session.points = points;
         }
 
-        params.onPendingShape(createFreehandShape(points));
+        const shape = createFreehandShape(points);
+        session.draftShape = shape;
+        params.onPendingShape(shape);
         return;
       }
 
-      params.onPendingShape(
-        createShapeFromPoints({
-          tool: session.tool,
-          start: session.start,
-          current: point,
-          lineWidth: params.styleLineWidth,
-        }),
-      );
+      const shape = createShapeFromPoints({
+        tool: session.tool,
+        start: session.start,
+        current: point,
+        lineWidth: params.styleLineWidth,
+      });
+      session.draftShape = shape;
+      params.onPendingShape(shape);
       return;
     }
 
@@ -335,18 +342,21 @@ export function usePointerInteractions(params: {
     }
 
     if (session.kind === "drawing") {
-      if (!params.pendingDraft) {
-        setCursor(params.tool === "select" ? "default" : "crosshair");
-        return;
-      }
+      const now = Date.now();
+      const pendingStyle = params.pendingDraft?.style ?? params.style;
+      const committedDraft = {
+        id: crypto.randomUUID(),
+        shape: structuredClone(session.draftShape),
+        style: structuredClone(pendingStyle),
+        visible: true,
+        createdAt: now,
+        updatedAt: now,
+      };
 
-      params.onCommit({
-        before: session.before,
-        after: [...session.before, params.pendingDraft],
-        command: "add",
-      });
-      params.onSelection([params.pendingDraft.id]);
+      params.onAddObject(committedDraft);
       params.onPendingShape(null);
+      setCursor(params.tool === "select" ? "default" : "crosshair");
+      return;
     }
 
     setCursor(params.tool === "select" ? "default" : "crosshair");
