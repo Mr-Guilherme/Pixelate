@@ -29,6 +29,7 @@ async function run() {
   await page.getByText("Redaction Settings").waitFor();
 
   await page.getByRole("button", { name: "Rectangle" }).click();
+  await page.waitForTimeout(250);
 
   const overlayCanvas = page.locator("canvas").last();
   await overlayCanvas.waitFor();
@@ -43,7 +44,7 @@ async function run() {
   await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.62);
   await page.mouse.up();
 
-  await page.getByRole("button", { name: "Apply", exact: true }).click();
+  await page.getByRole("button", { name: "Apply Redaction" }).click();
 
   await page.keyboard.press(`${mod}+Z`);
   await page.keyboard.press(`${mod}+Y`);

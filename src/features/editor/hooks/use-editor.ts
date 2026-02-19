@@ -91,6 +91,21 @@ export function useEditor() {
         return;
       }
 
+      const currentPending = state.document.pendingDraft;
+
+      if (currentPending) {
+        dispatch({
+          type: "setPendingDraft",
+          draft: {
+            ...currentPending,
+            shape: structuredClone(shape),
+            style: structuredClone(state.style),
+            updatedAt: Date.now(),
+          },
+        });
+        return;
+      }
+
       dispatch({
         type: "setPendingDraft",
         draft: createRedactionObject({
@@ -99,12 +114,11 @@ export function useEditor() {
         }),
       });
     },
-    [state.style],
+    [state.document.pendingDraft, state.style],
   );
 
   const confirmPending = useCallback(() => {
     dispatch({ type: "confirmPendingDraft" });
-    dispatch({ type: "setPendingDraft", draft: null });
   }, []);
 
   const cancelPending = useCallback(() => {

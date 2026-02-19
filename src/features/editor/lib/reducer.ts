@@ -127,9 +127,16 @@ export function editorReducer(
   }
 
   if (action.type === "setTool") {
+    const clearSelection = action.tool !== "select";
+
     return {
       ...state,
       tool: action.tool,
+      document: {
+        ...state.document,
+        pendingDraft: null,
+        selectedIds: clearSelection ? [] : state.document.selectedIds,
+      },
     };
   }
 
@@ -170,13 +177,21 @@ export function editorReducer(
     const before = cloneObjects(state.document.objects);
     const after = [...before, draft];
 
-    return withHistoryCommand({
+    const next = withHistoryCommand({
       state,
       before,
       after,
       command: "add",
-      selectedIds: [draft.id],
+      selectedIds: [],
     });
+
+    return {
+      ...next,
+      document: {
+        ...next.document,
+        pendingDraft: null,
+      },
+    };
   }
 
   if (action.type === "setObjectsTransient") {

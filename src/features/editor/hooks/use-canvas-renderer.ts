@@ -16,6 +16,7 @@ export function useCanvasRenderer(params: {
   image: ImageModel | null;
   objects: RedactionObject[];
   selectionIds: string[];
+  showSelection: boolean;
   pendingDraft: RedactionObject | null;
 }): ViewportTransform | null {
   const [transform, setTransform] = useState<ViewportTransform | null>(null);
@@ -40,7 +41,7 @@ export function useCanvasRenderer(params: {
         image: params.image,
         objects: params.objects,
         options: {
-          showSelection: true,
+          showSelection: params.showSelection,
           selectionIds: params.selectionIds,
           pendingDraft: params.pendingDraft,
         },
@@ -52,7 +53,17 @@ export function useCanvasRenderer(params: {
     return () => {
       window.cancelAnimationFrame(frameId);
     };
-  }, [params]);
+  }, [
+    params.baseCanvas,
+    params.overlayCanvas,
+    params.containerWidth,
+    params.containerHeight,
+    params.image,
+    params.objects,
+    params.selectionIds,
+    params.showSelection,
+    params.pendingDraft,
+  ]);
 
   return transform;
 }

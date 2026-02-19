@@ -13,21 +13,19 @@ export function PendingActionBar(params: {
   }
 
   return (
-    <div className="absolute right-4 top-4 z-20 flex items-center gap-2 rounded-xl border border-border bg-card p-2 shadow-lg">
+    <div className="absolute right-4 top-4 z-20 flex items-center gap-2 rounded-xl border border-border bg-card p-2.5 shadow-lg">
       <Button
         type="button"
-        size="sm"
-        className="gap-2"
+        className="h-10 gap-2 px-4"
         onClick={params.onApply}
       >
         <Check className="size-4" />
-        Apply
+        Apply Redaction
       </Button>
       <Button
         type="button"
-        size="sm"
         variant="outline"
-        className="gap-2"
+        className="h-10 gap-2 px-4"
         onClick={params.onCancel}
       >
         <X className="size-4" />

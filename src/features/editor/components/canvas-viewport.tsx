@@ -71,6 +71,7 @@ export function CanvasViewport(params: {
     image: params.image,
     objects: params.objects,
     selectionIds: params.selectedIds,
+    showSelection: params.tool === "select",
     pendingDraft: params.pendingDraft,
   });
 
@@ -96,7 +97,7 @@ export function CanvasViewport(params: {
     }
 
     if (params.tool !== "select") {
-      return "Draw shape, then click Apply to confirm censorship.";
+      return "Draw shape, then click Apply Redaction to confirm censorship.";
     }
 
     if (params.placingIds.length) {
