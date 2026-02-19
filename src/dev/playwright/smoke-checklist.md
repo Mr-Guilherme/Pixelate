@@ -1,9 +1,8 @@
 # Playwright Smoke Checklist
 
 1. Open app on `http://localhost:3000`.
-2. Import image using file picker input.
-3. Draw first rectangle redaction and verify it applies on pointer release.
-4. Change blur intensity in `Blur Intensity` control.
-5. Draw second rectangle redaction.
-6. Verify two objects exist and only one active selection remains (latest object).
-7. Click `Export PNG` and verify download trigger.
+2. Load wide fixture image.
+3. Draw redaction rectangles near all four corners.
+4. Export PNG and validate edge redactions are aligned between preview and export.
+5. Reload and repeat with tall fixture image.
+6. Confirm preview/export alignment checks pass and a download is triggered.
