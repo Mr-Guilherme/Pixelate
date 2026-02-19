@@ -12,9 +12,6 @@ import type {
   ViewportTransform,
 } from "@/features/editor/types/editor.types";
 
-let patchCanvas: HTMLCanvasElement | null = null;
-let maskCanvas: HTMLCanvasElement | null = null;
-
 interface CanvasPair {
   base: HTMLCanvasElement;
   overlay: HTMLCanvasElement;
@@ -27,20 +24,41 @@ interface ViewportInput {
   imageHeight: number;
 }
 
-function getScratchCanvases(): {
+interface ImageRenderTransform {
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+}
+
+interface ScratchCanvases {
+  compositionCanvas: HTMLCanvasElement;
   patchCanvas: HTMLCanvasElement;
   maskCanvas: HTMLCanvasElement;
-} | null {
+}
+
+let compositionCanvas: HTMLCanvasElement | null = null;
+let patchCanvas: HTMLCanvasElement | null = null;
+let maskCanvas: HTMLCanvasElement | null = null;
+
+function getScratchCanvases(): ScratchCanvases | null {
   if (typeof document === "undefined") {
     return null;
   }
 
-  if (!patchCanvas || !maskCanvas) {
+  if (!compositionCanvas) {
+    compositionCanvas = document.createElement("canvas");
+  }
+
+  if (!patchCanvas) {
     patchCanvas = document.createElement("canvas");
+  }
+
+  if (!maskCanvas) {
     maskCanvas = document.createElement("canvas");
   }
 
   return {
+    compositionCanvas,
     patchCanvas,
     maskCanvas,
   };
@@ -78,6 +96,24 @@ function setupCanvas(params: {
   context.setTransform(params.dpr, 0, 0, params.dpr, 0, 0);
 
   return context;
+}
+
+function clearContext(params: {
+  context: CanvasRenderingContext2D;
+  width: number;
+  height: number;
+}): void {
+  params.context.clearRect(0, 0, params.width, params.height);
+}
+
+function createImageRenderTransform(
+  transform: ViewportTransform,
+): ImageRenderTransform {
+  return {
+    scale: transform.scale,
+    offsetX: transform.offsetX,
+    offsetY: transform.offsetY,
+  };
 }
 
 export function getViewportTransform(params: ViewportInput): ViewportTransform {
@@ -123,24 +159,36 @@ export function toScreenPoint(params: {
   };
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
 function clampBoundsToImage(params: {
   bounds: ReturnType<typeof getShapeBounds>;
   image: ImageModel;
+  padding?: number;
 }): ReturnType<typeof getShapeBounds> | null {
-  const x = Math.max(0, Math.floor(params.bounds.x));
-  const y = Math.max(0, Math.floor(params.bounds.y));
-  const maxX = Math.min(
-    params.image.width,
-    Math.ceil(params.bounds.x + params.bounds.width),
-  );
-  const maxY = Math.min(
+  const padding = params.padding ?? 0;
+  const x = clamp(Math.floor(params.bounds.x - padding), 0, params.image.width);
+  const y = clamp(
+    Math.floor(params.bounds.y - padding),
+    0,
     params.image.height,
-    Math.ceil(params.bounds.y + params.bounds.height),
+  );
+  const maxX = clamp(
+    Math.ceil(params.bounds.x + params.bounds.width + padding),
+    0,
+    params.image.width,
+  );
+  const maxY = clamp(
+    Math.ceil(params.bounds.y + params.bounds.height + padding),
+    0,
+    params.image.height,
   );
   const width = maxX - x;
   const height = maxY - y;
 
-  if (width <= 0 || height <= 0) {
+  if (width < 1 || height < 1) {
     return null;
   }
 
@@ -178,6 +226,14 @@ function drawShapeMask(params: {
   params.context.fill(path);
 }
 
+function getPixelatePadding(object: RedactionObject): number {
+  if (object.shape.type !== "line") {
+    return 2;
+  }
+
+  return Math.max(2, Math.ceil(object.shape.data.width / 2) + 2);
+}
+
 function applyPixelate(params: {
   context: CanvasRenderingContext2D;
   object: RedactionObject;
@@ -192,6 +248,7 @@ function applyPixelate(params: {
   const bounds = clampBoundsToImage({
     bounds: getShapeBounds(params.object.shape),
     image: params.image,
+    padding: getPixelatePadding(params.object),
   });
 
   if (!bounds) {
@@ -211,7 +268,9 @@ function applyPixelate(params: {
 
   scratch.patchCanvas.width = bounds.width;
   scratch.patchCanvas.height = bounds.height;
-  const patchContext = scratch.patchCanvas.getContext("2d");
+  const patchContext = scratch.patchCanvas.getContext("2d", {
+    willReadFrequently: true,
+  });
 
   if (!patchContext) {
     return;
@@ -265,29 +324,96 @@ function applyFill(params: {
   params.context.fill(path);
 }
 
-function drawObject(params: {
+function renderImageSpaceObjects(params: {
   context: CanvasRenderingContext2D;
-  object: RedactionObject;
   image: ImageModel;
+  objects: RedactionObject[];
 }): void {
-  if (!params.object.visible) {
-    return;
-  }
+  params.context.setTransform(1, 0, 0, 1, 0, 0);
+  params.context.clearRect(0, 0, params.image.width, params.image.height);
+  params.context.imageSmoothingEnabled = true;
+  params.context.drawImage(
+    params.image.bitmap,
+    0,
+    0,
+    params.image.width,
+    params.image.height,
+  );
 
-  if (params.object.style.mode === "pixelate") {
-    applyPixelate(params);
-    return;
-  }
+  for (const object of params.objects) {
+    if (!object.visible) {
+      continue;
+    }
 
-  applyFill(params);
+    if (object.style.mode === "pixelate") {
+      applyPixelate({
+        context: params.context,
+        object,
+        image: params.image,
+      });
+      continue;
+    }
+
+    applyFill({
+      context: params.context,
+      object,
+    });
+  }
 }
 
-function clearContext(params: {
+function composeRedactedImage(params: {
+  image: ImageModel;
+  objects: RedactionObject[];
+}): HTMLCanvasElement | null {
+  const scratch = getScratchCanvases();
+
+  if (!scratch) {
+    return null;
+  }
+
+  if (
+    scratch.compositionCanvas.width !== params.image.width ||
+    scratch.compositionCanvas.height !== params.image.height
+  ) {
+    scratch.compositionCanvas.width = params.image.width;
+    scratch.compositionCanvas.height = params.image.height;
+  }
+
+  const compositionContext = scratch.compositionCanvas.getContext("2d", {
+    alpha: true,
+    willReadFrequently: true,
+  });
+
+  if (!compositionContext) {
+    return null;
+  }
+
+  renderImageSpaceObjects({
+    context: compositionContext,
+    image: params.image,
+    objects: params.objects,
+  });
+
+  return scratch.compositionCanvas;
+}
+
+function renderComposedWithTransform(params: {
   context: CanvasRenderingContext2D;
-  width: number;
-  height: number;
+  image: ImageModel;
+  composed: HTMLCanvasElement;
+  transform: ImageRenderTransform;
 }): void {
-  params.context.clearRect(0, 0, params.width, params.height);
+  params.context.save();
+  params.context.translate(params.transform.offsetX, params.transform.offsetY);
+  params.context.scale(params.transform.scale, params.transform.scale);
+  params.context.drawImage(
+    params.composed,
+    0,
+    0,
+    params.image.width,
+    params.image.height,
+  );
+  params.context.restore();
 }
 
 function drawSelectedOverlay(params: {
@@ -370,36 +496,14 @@ function drawPendingOverlay(params: {
     params.context.lineWidth =
       params.pendingDraft.style.lineWidth / params.transform.scale;
     params.context.stroke(path);
-  } else {
-    params.context.fill(path);
-    params.context.lineWidth = 1 / params.transform.scale;
-    params.context.stroke(path);
+    params.context.restore();
+    return;
   }
 
+  params.context.fill(path);
+  params.context.lineWidth = 1 / params.transform.scale;
+  params.context.stroke(path);
   params.context.restore();
-}
-
-function drawImageAndObjects(params: {
-  context: CanvasRenderingContext2D;
-  image: ImageModel;
-  objects: RedactionObject[];
-}): void {
-  params.context.imageSmoothingEnabled = true;
-  params.context.drawImage(
-    params.image.bitmap,
-    0,
-    0,
-    params.image.width,
-    params.image.height,
-  );
-
-  for (const object of params.objects) {
-    drawObject({
-      context: params.context,
-      object,
-      image: params.image,
-    });
-  }
 }
 
 export function renderCanvases(params: {
@@ -449,16 +553,20 @@ export function renderCanvases(params: {
     imageWidth: params.image.width,
     imageHeight: params.image.height,
   });
-
-  baseContext.save();
-  baseContext.translate(transform.offsetX, transform.offsetY);
-  baseContext.scale(transform.scale, transform.scale);
-  drawImageAndObjects({
-    context: baseContext,
+  const imageTransform = createImageRenderTransform(transform);
+  const composed = composeRedactedImage({
     image: params.image,
     objects: params.objects,
   });
-  baseContext.restore();
+
+  if (composed) {
+    renderComposedWithTransform({
+      context: baseContext,
+      image: params.image,
+      composed,
+      transform: imageTransform,
+    });
+  }
 
   if (params.options.showSelection) {
     drawSelectedOverlay({
@@ -496,7 +604,27 @@ export function renderExportCanvas(params: {
     return canvas;
   }
 
-  drawImageAndObjects({
+  const composed = composeRedactedImage({
+    image: params.image,
+    objects: params.objects,
+  });
+
+  if (composed) {
+    renderComposedWithTransform({
+      context,
+      image: params.image,
+      composed,
+      transform: {
+        scale: 1,
+        offsetX: 0,
+        offsetY: 0,
+      },
+    });
+
+    return canvas;
+  }
+
+  renderImageSpaceObjects({
     context,
     image: params.image,
     objects: params.objects,
