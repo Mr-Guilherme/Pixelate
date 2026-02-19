@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0ea5e9"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="720" fill="url(#bg)"/>
+  <circle cx="260" cy="220" r="120" fill="#f97316" opacity="0.85"/>
+  <rect x="580" y="110" width="420" height="260" rx="26" fill="#e2e8f0" opacity="0.8"/>
+  <text x="140" y="620" font-size="74" font-family="Arial, sans-serif" fill="#ffffff">Sensitive Data Preview</text>
+</svg>
