@@ -7,13 +7,40 @@ import { chromium } from "playwright";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const workspaceRoot = path.resolve(__dirname, "../../..");
-const samplePath = path.join(__dirname, "assets", "sample-image.svg.png");
+const samplePath = path.join(
+  workspaceRoot,
+  "tests",
+  "fixtures",
+  "smoke-image.png",
+);
 const outputDir = path.join(workspaceRoot, "output", "playwright");
+const docsDir = path.join(workspaceRoot, "docs");
 const baseUrl = process.env.SMOKE_BASE_URL ?? "http://localhost:3000";
-const mod = process.platform === "darwin" ? "Meta" : "Control";
+
+async function drawRectangle(params) {
+  const overlayCanvas = params.page.locator("canvas").last();
+  await overlayCanvas.waitFor();
+  const box = await overlayCanvas.boundingBox();
+
+  if (!box) {
+    throw new Error("Overlay canvas is not visible.");
+  }
+
+  await params.page.mouse.move(
+    box.x + box.width * params.startX,
+    box.y + box.height * params.startY,
+  );
+  await params.page.mouse.down();
+  await params.page.mouse.move(
+    box.x + box.width * params.endX,
+    box.y + box.height * params.endY,
+  );
+  await params.page.mouse.up();
+}
 
 async function run() {
   await mkdir(outputDir, { recursive: true });
+  await mkdir(docsDir, { recursive: true });
 
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ acceptDownloads: true });
@@ -26,30 +53,57 @@ async function run() {
     .getByRole("button", { name: "Import image area" })
     .locator('input[type="file"]')
     .setInputFiles(samplePath);
+
   await page.getByText("Redaction Settings").waitFor();
 
   await page.getByRole("button", { name: "Rectangle" }).click();
-  await page.waitForTimeout(250);
+  await page.waitForTimeout(200);
 
-  const overlayCanvas = page.locator("canvas").last();
-  await overlayCanvas.waitFor();
-  const box = await overlayCanvas.boundingBox();
+  await drawRectangle({
+    page,
+    startX: 0.18,
+    startY: 0.24,
+    endX: 0.44,
+    endY: 0.52,
+  });
 
-  if (!box) {
-    throw new Error("Overlay canvas is not visible.");
+  await page.getByTestId("blur-intensity-input").fill("82");
+  await page.keyboard.press("Enter");
+
+  await drawRectangle({
+    page,
+    startX: 0.56,
+    startY: 0.28,
+    endX: 0.82,
+    endY: 0.58,
+  });
+
+  const objectCount = await page.getByTestId("object-item").count();
+
+  if (objectCount < 2) {
+    throw new Error(
+      `Expected at least 2 redaction objects, got ${objectCount}.`,
+    );
   }
 
-  await page.mouse.move(box.x + box.width * 0.28, box.y + box.height * 0.3);
-  await page.mouse.down();
-  await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.62);
-  await page.mouse.up();
+  const selectedCount = await page
+    .locator('[data-testid="object-item"][data-selected="true"]')
+    .count();
 
-  await page.getByRole("button", { name: "Apply Redaction" }).click();
+  if (selectedCount !== 1) {
+    throw new Error(
+      `Expected exactly 1 active selection, got ${selectedCount}.`,
+    );
+  }
 
-  await page.keyboard.press(`${mod}+Z`);
-  await page.keyboard.press(`${mod}+Y`);
-  await page.keyboard.press(`${mod}+C`);
-  await page.keyboard.press(`${mod}+V`);
+  const firstSelected = await page
+    .locator('[data-testid="object-item"]')
+    .first()
+    .getAttribute("data-selected");
+
+  if (firstSelected !== "true") {
+    throw new Error("Expected latest object to be the active selection.");
+  }
 
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export PNG" }).click();
@@ -59,6 +113,11 @@ async function run() {
 
   await page.screenshot({
     path: path.join(outputDir, "smoke-editor.png"),
+    fullPage: true,
+  });
+
+  await page.screenshot({
+    path: path.join(docsDir, "image-redactor-ux.png"),
     fullPage: true,
   });
 

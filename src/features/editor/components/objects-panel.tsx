@@ -55,6 +55,8 @@ export function ObjectsPanel(params: {
                 <button
                   key={object.id}
                   type="button"
+                  data-testid="object-item"
+                  data-selected={selected}
                   className={cn(
                     "w-full rounded-lg border px-3 py-2 text-left text-sm transition-colors",
                     selected
