@@ -16,79 +16,112 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-interface RangeControlProps {
+function intensityToBlockSize(intensity: number): number {
+  return Math.round(2 + (clamp(intensity, 0, 100) / 100) * 126);
+}
+
+function blockSizeToIntensity(blockSize: number): number {
+  return Math.round(((clamp(blockSize, 2, 128) - 2) / 126) * 100);
+}
+
+interface PrecisionControlProps {
   label: string;
+  value: number;
   min: number;
   max: number;
   step: number;
-  value: number;
+  coarseStep: number;
   suffix: string;
+  inputId: string;
   onChange: (value: number) => void;
 }
 
-function RangeControl(params: RangeControlProps): React.JSX.Element {
-  const increase = () => {
-    params.onChange(clamp(params.value + params.step, params.min, params.max));
-  };
-
-  const decrease = () => {
-    params.onChange(clamp(params.value - params.step, params.min, params.max));
+function PrecisionControl(params: PrecisionControlProps): React.JSX.Element {
+  const updateValue = (next: number) => {
+    params.onChange(clamp(next, params.min, params.max));
   };
 
   return (
     <div className="space-y-2">
-      <Label className="text-xs font-medium text-muted-foreground">
-        {params.label}
-      </Label>
-      <div className="flex items-center gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          className="size-9"
-          onClick={decrease}
+      <div className="flex items-center justify-between">
+        <Label
+          htmlFor={params.inputId}
+          className="text-xs font-medium text-muted-foreground"
         >
-          -
-        </Button>
-        <Slider
-          min={params.min}
-          max={params.max}
-          step={params.step}
-          value={[params.value]}
-          className="flex-1 px-2"
-          onValueChange={([value]) => params.onChange(value)}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          className="size-9"
-          onClick={increase}
-        >
-          +
-        </Button>
+          {params.label}
+        </Label>
+        <span className="rounded-md border border-border px-2 py-1 text-xs font-medium">
+          {params.value}
+          {params.suffix}
+        </span>
       </div>
-      <Input
-        type="number"
+
+      <Slider
         min={params.min}
         max={params.max}
         step={params.step}
-        value={params.value}
-        className="h-10"
-        onChange={(event) => {
-          const next = Number(event.target.value);
-
-          if (Number.isNaN(next)) {
-            return;
-          }
-
-          params.onChange(clamp(next, params.min, params.max));
-        }}
+        value={[params.value]}
+        className="px-1"
+        onValueChange={([value]) => updateValue(value)}
       />
-      <p className="text-xs text-muted-foreground">
-        Current: {params.value}
-        {params.suffix}
-      </p>
+
+      <div className="grid grid-cols-[repeat(4,40px)_1fr] items-center gap-2">
+        <Button
+          type="button"
+          size="icon"
+          variant="outline"
+          className="h-10 w-10"
+          onClick={() => updateValue(params.value - params.coarseStep)}
+        >
+          -{params.coarseStep}
+        </Button>
+        <Button
+          type="button"
+          size="icon"
+          variant="outline"
+          className="h-10 w-10"
+          onClick={() => updateValue(params.value - params.step)}
+        >
+          -{params.step}
+        </Button>
+        <Button
+          type="button"
+          size="icon"
+          variant="outline"
+          className="h-10 w-10"
+          onClick={() => updateValue(params.value + params.step)}
+        >
+          +{params.step}
+        </Button>
+        <Button
+          type="button"
+          size="icon"
+          variant="outline"
+          className="h-10 w-10"
+          onClick={() => updateValue(params.value + params.coarseStep)}
+        >
+          +{params.coarseStep}
+        </Button>
+        <Input
+          id={params.inputId}
+          data-testid={params.inputId}
+          type="number"
+          min={params.min}
+          max={params.max}
+          step={params.step}
+          value={params.value}
+          className="h-10"
+          onChange={(event) => {
+            const next = Number(event.target.value);
+
+            if (Number.isNaN(next)) {
+              return;
+            }
+
+            updateValue(next);
+          }}
+        />
+      </div>
     </div>
   );
 }
@@ -99,6 +132,8 @@ export function SettingsPanel(params: {
   onStyleChange: (style: StyleParams) => void;
   onApplySelectionStyle: () => void;
 }): React.JSX.Element {
+  const blurIntensity = blockSizeToIntensity(params.style.pixelate.blockSize);
+
   const setMode = (mode: RedactionMode) => {
     params.onStyleChange({
       ...params.style,
@@ -106,12 +141,12 @@ export function SettingsPanel(params: {
     });
   };
 
-  const setBlockSize = (value: number) => {
+  const setBlurIntensity = (value: number) => {
     params.onStyleChange({
       ...params.style,
       pixelate: {
         ...params.style.pixelate,
-        blockSize: value,
+        blockSize: intensityToBlockSize(value),
       },
     });
   };
@@ -168,22 +203,26 @@ export function SettingsPanel(params: {
 
         {params.style.mode === "pixelate" ? (
           <>
-            <RangeControl
-              label="Intensity (block size)"
-              min={2}
-              max={96}
+            <PrecisionControl
+              label="Blur Intensity"
+              value={blurIntensity}
+              min={0}
+              max={100}
               step={1}
-              value={params.style.pixelate.blockSize}
-              suffix="px"
-              onChange={setBlockSize}
+              coarseStep={10}
+              suffix=""
+              inputId="blur-intensity-input"
+              onChange={setBlurIntensity}
             />
-            <RangeControl
+            <PrecisionControl
               label="Opacity"
+              value={Math.round(params.style.pixelate.alpha * 100)}
               min={10}
               max={100}
               step={1}
-              value={Math.round(params.style.pixelate.alpha * 100)}
+              coarseStep={10}
               suffix="%"
+              inputId="blur-opacity-input"
               onChange={setOpacity}
             />
           </>
@@ -223,13 +262,15 @@ export function SettingsPanel(params: {
           </div>
         )}
 
-        <RangeControl
+        <PrecisionControl
           label="Line Width"
+          value={params.style.lineWidth}
           min={1}
           max={128}
           step={1}
-          value={params.style.lineWidth}
+          coarseStep={8}
           suffix="px"
+          inputId="line-width-input"
           onChange={setLineWidth}
         />
 
