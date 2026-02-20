@@ -1,3 +1,4 @@
+import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import type { Metadata } from "next";
 import { Space_Grotesk } from "next/font/google";
@@ -33,6 +34,7 @@ export default function RootLayout({
       >
         <TooltipProvider>
           {children}
+          {process.env.NODE_ENV === "production" ? <Analytics /> : null}
           {process.env.NODE_ENV === "production" ? <SpeedInsights /> : null}
         </TooltipProvider>
       </body>
