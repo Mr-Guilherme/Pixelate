@@ -6,6 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import {
+  blockSizeToIntensity,
+  intensityToBlockSize,
+} from "@/features/editor/lib/pixelate";
 import type {
   RedactionMode,
   StyleParams,
@@ -14,14 +18,6 @@ import { cn } from "@/lib/utils";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
-}
-
-function intensityToBlockSize(intensity: number): number {
-  return Math.round(2 + (clamp(intensity, 0, 100) / 100) * 126);
-}
-
-function blockSizeToIntensity(blockSize: number): number {
-  return Math.round(((clamp(blockSize, 2, 128) - 2) / 126) * 100);
 }
 
 interface PrecisionControlProps {
@@ -204,16 +200,19 @@ export function SettingsPanel(params: {
         {params.style.mode === "pixelate" ? (
           <>
             <PrecisionControl
-              label="Blur Intensity"
+              label="Pixelation Strength"
               value={blurIntensity}
               min={0}
               max={100}
               step={1}
               coarseStep={10}
-              suffix=""
+              suffix="%"
               inputId="blur-intensity-input"
               onChange={setBlurIntensity}
             />
+            <p className="text-xs text-muted-foreground">
+              Block size: {params.style.pixelate.blockSize}px
+            </p>
             <PrecisionControl
               label="Opacity"
               value={Math.round(params.style.pixelate.alpha * 100)}

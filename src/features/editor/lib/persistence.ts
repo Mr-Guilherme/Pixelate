@@ -2,6 +2,10 @@ import {
   DEFAULT_PREFERENCES,
   STORAGE_KEY_PREFERENCES,
 } from "@/features/editor/lib/defaults";
+import {
+  clampPixelateBlockSize,
+  getPixelateBlockSizeBounds,
+} from "@/features/editor/lib/pixelate";
 import type {
   PreferencesV1,
   StyleParams,
@@ -41,10 +45,16 @@ function isStyle(style: unknown): style is StyleParams {
 }
 
 function normalizeStyle(style: StyleParams): StyleParams {
+  const bounds = getPixelateBlockSizeBounds();
+
   return {
     mode: style.mode,
     pixelate: {
-      blockSize: clamp(Math.round(style.pixelate.blockSize), 2, 128),
+      blockSize: clamp(
+        clampPixelateBlockSize(style.pixelate.blockSize),
+        bounds.min,
+        bounds.max,
+      ),
       alpha: clamp(style.pixelate.alpha, 0.1, 1),
     },
     fill: {

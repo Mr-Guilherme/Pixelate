@@ -12,7 +12,7 @@ export const DEFAULT_TOOL: ToolType = "select";
 export const DEFAULT_STYLE: StyleParams = {
   mode: "pixelate",
   pixelate: {
-    blockSize: 12,
+    blockSize: 8,
     alpha: 0.9,
   },
   fill: {
