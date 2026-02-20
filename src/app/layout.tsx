@@ -12,6 +12,11 @@ export const metadata: Metadata = {
   title: "Image Censor",
   description: "Fast local browser image redaction",
   manifest: "/manifest.webmanifest",
+  icons: {
+    icon: "/icon.png",
+    shortcut: "/favicon.ico",
+    apple: "/icon.png",
+  },
 };
 
 export default function RootLayout({
