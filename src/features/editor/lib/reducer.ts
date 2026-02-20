@@ -9,6 +9,10 @@ import {
   redoHistory,
   undoHistory,
 } from "@/features/editor/lib/history";
+import {
+  getStyleLineWidth,
+  modeToObjectKind,
+} from "@/features/editor/lib/object-style";
 import type {
   CommandType,
   EditorDocument,
@@ -50,7 +54,9 @@ export type EditorAction =
   | { type: "setPlacingIds"; ids: string[] }
   | { type: "clearPlacingIds" }
   | { type: "replaceAll"; objects: RedactionObject[] }
-  | { type: "applyStyleToSelection" };
+  | { type: "applyStyleToSelection" }
+  | { type: "bringSelectionToFront" }
+  | { type: "sendSelectionToBack" };
 
 export const initialEditorState: EditorState = {
   document: {
@@ -68,6 +74,87 @@ export const initialEditorState: EditorState = {
 
 function cloneObjects(objects: RedactionObject[]): RedactionObject[] {
   return objects.map((item) => structuredClone(item));
+}
+
+function insertObjectWithDefaultLayer(params: {
+  objects: RedactionObject[];
+  object: RedactionObject;
+}): RedactionObject[] {
+  const nextObject = structuredClone(params.object);
+
+  if (nextObject.kind === "markup") {
+    return [...params.objects, nextObject];
+  }
+
+  const markupIndex = params.objects.findIndex(
+    (item) => item.kind === "markup",
+  );
+
+  if (markupIndex < 0) {
+    return [...params.objects, nextObject];
+  }
+
+  return [
+    ...params.objects.slice(0, markupIndex),
+    nextObject,
+    ...params.objects.slice(markupIndex),
+  ];
+}
+
+function reorderSelection(params: {
+  objects: RedactionObject[];
+  selectedIds: string[];
+  position: "front" | "back";
+}): RedactionObject[] {
+  const selected = new Set(params.selectedIds);
+  const selectedObjects = params.objects.filter((item) =>
+    selected.has(item.id),
+  );
+
+  if (!selectedObjects.length) {
+    return params.objects;
+  }
+
+  const remainingObjects = params.objects.filter(
+    (item) => !selected.has(item.id),
+  );
+
+  if (params.position === "front") {
+    return [...remainingObjects, ...selectedObjects];
+  }
+
+  return [...selectedObjects, ...remainingObjects];
+}
+
+function applyStyleToObject(params: {
+  object: RedactionObject;
+  style: StyleParams;
+}): RedactionObject {
+  const now = Date.now();
+  const kind = modeToObjectKind(params.style.mode);
+
+  if (params.object.shape.type !== "line") {
+    return {
+      ...params.object,
+      kind,
+      style: structuredClone(params.style),
+      updatedAt: now,
+    };
+  }
+
+  return {
+    ...params.object,
+    kind,
+    style: structuredClone(params.style),
+    shape: {
+      type: "line",
+      data: {
+        ...params.object.shape.data,
+        width: Math.max(1, Math.round(getStyleLineWidth(params.style))),
+      },
+    },
+    updatedAt: now,
+  };
 }
 
 function withHistoryCommand(params: {
@@ -179,7 +266,10 @@ export function editorReducer(
 
   if (action.type === "appendObject") {
     const before = cloneObjects(state.document.objects);
-    const after = [...before, structuredClone(action.object)];
+    const after = insertObjectWithDefaultLayer({
+      objects: before,
+      object: action.object,
+    });
 
     return withHistoryCommand({
       state,
@@ -306,11 +396,50 @@ export function editorReducer(
         return item;
       }
 
-      return {
-        ...item,
-        style: structuredClone(state.style),
-        updatedAt: Date.now(),
-      };
+      return applyStyleToObject({
+        object: item,
+        style: state.style,
+      });
+    });
+
+    return withHistoryCommand({
+      state,
+      before,
+      after,
+      command: "update",
+    });
+  }
+
+  if (action.type === "bringSelectionToFront") {
+    if (!state.document.selectedIds.length) {
+      return state;
+    }
+
+    const before = cloneObjects(state.document.objects);
+    const after = reorderSelection({
+      objects: before,
+      selectedIds: state.document.selectedIds,
+      position: "front",
+    });
+
+    return withHistoryCommand({
+      state,
+      before,
+      after,
+      command: "update",
+    });
+  }
+
+  if (action.type === "sendSelectionToBack") {
+    if (!state.document.selectedIds.length) {
+      return state;
+    }
+
+    const before = cloneObjects(state.document.objects);
+    const after = reorderSelection({
+      objects: before,
+      selectedIds: state.document.selectedIds,
+      position: "back",
     });
 
     return withHistoryCommand({

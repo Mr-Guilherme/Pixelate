@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useReducer } from "react";
+import { useCallback, useMemo, useReducer, useRef } from "react";
 import { useLocalPreferences } from "@/features/editor/hooks/use-local-preferences";
 import {
   duplicateObjectsWithOffset,
   serializeShapeClipboard,
 } from "@/features/editor/lib/clipboard";
+import { modeToObjectKind } from "@/features/editor/lib/object-style";
 import {
   editorReducer,
   initialEditorState,
@@ -21,7 +22,7 @@ import type {
   ToolType,
 } from "@/features/editor/types/editor.types";
 
-function createRedactionObject(params: {
+function createEditorObject(params: {
   shape: ShapeGeometry;
   style: StyleParams;
 }): RedactionObject {
@@ -29,6 +30,7 @@ function createRedactionObject(params: {
 
   return {
     id: crypto.randomUUID(),
+    kind: modeToObjectKind(params.style.mode),
     shape: structuredClone(params.shape),
     style: structuredClone(params.style),
     visible: true,
@@ -39,6 +41,7 @@ function createRedactionObject(params: {
 
 export function useEditor() {
   const [state, dispatch] = useReducer(editorReducer, initialEditorState);
+  const previewStyleRef = useRef<StyleParams | null>(null);
 
   const canUndo = state.history.undo.length > 0;
   const canRedo = state.history.redo.length > 0;
@@ -55,13 +58,23 @@ export function useEditor() {
     dispatch({ type: "setTool", tool });
   }, []);
 
+  const setStylePreview = useCallback((style: StyleParams) => {
+    previewStyleRef.current = structuredClone(style);
+  }, []);
+
   const setStyle = useCallback((style: StyleParams) => {
+    previewStyleRef.current = null;
     dispatch({ type: "setStyle", style });
+  }, []);
+
+  const clearStylePreview = useCallback(() => {
+    previewStyleRef.current = null;
   }, []);
 
   const updateStyle = useCallback(
     (updater: (current: StyleParams) => StyleParams) => {
-      const next = updater(state.style);
+      const next = updater(previewStyleRef.current ?? state.style);
+      previewStyleRef.current = null;
       dispatch({ type: "setStyle", style: next });
     },
     [state.style],
@@ -86,6 +99,8 @@ export function useEditor() {
 
   const setPendingShape = useCallback(
     (shape: ShapeGeometry | null) => {
+      const activeStyle = previewStyleRef.current ?? state.style;
+
       if (!shape) {
         dispatch({ type: "setPendingDraft", draft: null });
         return;
@@ -98,8 +113,9 @@ export function useEditor() {
           type: "setPendingDraft",
           draft: {
             ...currentPending,
+            kind: modeToObjectKind(activeStyle.mode),
             shape: structuredClone(shape),
-            style: structuredClone(state.style),
+            style: structuredClone(activeStyle),
             updatedAt: Date.now(),
           },
         });
@@ -108,9 +124,9 @@ export function useEditor() {
 
       dispatch({
         type: "setPendingDraft",
-        draft: createRedactionObject({
+        draft: createEditorObject({
           shape,
-          style: state.style,
+          style: activeStyle,
         }),
       });
     },
@@ -147,6 +163,14 @@ export function useEditor() {
 
   const deleteSelected = useCallback(() => {
     dispatch({ type: "deleteSelected" });
+  }, []);
+
+  const bringSelectionToFront = useCallback(() => {
+    dispatch({ type: "bringSelectionToFront" });
+  }, []);
+
+  const sendSelectionToBack = useCallback(() => {
+    dispatch({ type: "sendSelectionToBack" });
   }, []);
 
   const undo = useCallback(() => {
@@ -229,9 +253,12 @@ export function useEditor() {
 
   return {
     state,
+    style: state.style,
     canUndo,
     canRedo,
     selectedObjects,
+    setStylePreview,
+    clearStylePreview,
     setTool,
     setStyle,
     updateStyle,
@@ -243,6 +270,8 @@ export function useEditor() {
     addObject,
     commitObjects,
     deleteSelected,
+    bringSelectionToFront,
+    sendSelectionToBack,
     undo,
     redo,
     applyStyleToSelection,

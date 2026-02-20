@@ -1,5 +1,31 @@
-const CACHE_NAME = "image-censor-v1";
+const CACHE_NAME = "image-censor-v2";
 const STATIC_ASSETS = ["/", "/manifest.webmanifest"];
+
+function shouldCache(request, response) {
+  if (!response.ok) {
+    return false;
+  }
+
+  if (request.method !== "GET") {
+    return false;
+  }
+
+  const url = new URL(request.url);
+
+  if (url.origin !== self.location.origin) {
+    return false;
+  }
+
+  if (url.pathname.startsWith("/_next/")) {
+    return true;
+  }
+
+  if (request.destination === "image" || request.destination === "font") {
+    return true;
+  }
+
+  return request.mode === "navigate";
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -29,24 +55,34 @@ self.addEventListener("fetch", (event) => {
   }
 
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) {
-        return cached;
-      }
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
 
-      return fetch(event.request)
-        .then((response) => {
-          const clone = response.clone();
+      try {
+        const networkResponse = await fetch(event.request);
 
-          if (response.ok) {
-            caches
-              .open(CACHE_NAME)
-              .then((cache) => cache.put(event.request, clone));
+        if (shouldCache(event.request, networkResponse)) {
+          cache.put(event.request, networkResponse.clone());
+        }
+
+        return networkResponse;
+      } catch {
+        const cached = await cache.match(event.request);
+
+        if (cached) {
+          return cached;
+        }
+
+        if (event.request.mode === "navigate") {
+          const fallback = await cache.match("/");
+
+          if (fallback) {
+            return fallback;
           }
+        }
 
-          return response;
-        })
-        .catch(() => caches.match("/"));
-    }),
+        throw new Error("Network and cache unavailable.");
+      }
+    })(),
   );
 });

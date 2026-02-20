@@ -33,16 +33,10 @@ export function useLocalPreferences(params: {
       return;
     }
 
-    const timeoutId = window.setTimeout(() => {
-      savePreferences({
-        version: 1,
-        defaultTool: params.tool,
-        defaultStyle: params.style,
-      });
-    }, 200);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
+    savePreferences({
+      version: 1,
+      defaultTool: params.tool,
+      defaultStyle: params.style,
+    });
   }, [params.style, params.tool]);
 }

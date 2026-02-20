@@ -18,6 +18,10 @@ export const DEFAULT_STYLE: StyleParams = {
   fill: {
     color: "#000000",
   },
+  markup: {
+    strokeColor: "#f97316",
+    strokeWidth: 6,
+  },
   lineWidth: 24,
 };
 

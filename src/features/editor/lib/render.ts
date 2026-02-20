@@ -3,6 +3,7 @@ import {
   getShapeBounds,
   shapeToPath,
 } from "@/features/editor/lib/geometry";
+import { getObjectStrokeWidth } from "@/features/editor/lib/object-style";
 import {
   clampPixelateBlockSize,
   computePixelateGrid,
@@ -407,6 +408,18 @@ function applyFill(params: {
   params.context.fill(path);
 }
 
+function applyMarkup(params: {
+  context: CanvasRenderingContext2D;
+  object: RedactionObject;
+}): void {
+  const path = shapeToPath({ shape: params.object.shape });
+  params.context.strokeStyle = params.object.style.markup.strokeColor;
+  params.context.lineWidth = Math.max(1, getObjectStrokeWidth(params.object));
+  params.context.lineCap = "round";
+  params.context.lineJoin = "round";
+  params.context.stroke(path);
+}
+
 function renderImageSpaceObjects(params: {
   context: CanvasRenderingContext2D;
   image: ImageModel;
@@ -425,6 +438,14 @@ function renderImageSpaceObjects(params: {
 
   for (const object of params.objects) {
     if (!object.visible) {
+      continue;
+    }
+
+    if (object.kind === "markup") {
+      applyMarkup({
+        context: params.context,
+        object,
+      });
       continue;
     }
 
@@ -524,7 +545,7 @@ function drawSelectedOverlay(params: {
 
     if (object.shape.type === "line") {
       params.context.lineWidth =
-        object.style.lineWidth / params.transform.scale;
+        getObjectStrokeWidth(object) / params.transform.scale;
       params.context.stroke(path);
       params.context.lineWidth = 1 / params.transform.scale;
       continue;
@@ -575,9 +596,17 @@ function drawPendingOverlay(params: {
 
   const path = shapeToPath({ shape: params.pendingDraft.shape });
 
+  if (params.pendingDraft.kind === "markup") {
+    params.context.lineWidth =
+      getObjectStrokeWidth(params.pendingDraft) / params.transform.scale;
+    params.context.stroke(path);
+    params.context.restore();
+    return;
+  }
+
   if (params.pendingDraft.shape.type === "line") {
     params.context.lineWidth =
-      params.pendingDraft.style.lineWidth / params.transform.scale;
+      getObjectStrokeWidth(params.pendingDraft) / params.transform.scale;
     params.context.stroke(path);
     params.context.restore();
     return;
