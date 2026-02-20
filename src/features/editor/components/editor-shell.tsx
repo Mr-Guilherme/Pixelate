@@ -36,7 +36,7 @@ export function EditorShell(): React.JSX.Element {
     if (
       editor.state.document.image &&
       editor.state.document.objects.length > 0 &&
-      !window.confirm("Replace current image and discard existing redactions?")
+      !window.confirm("Replace current image and discard existing objects?")
     ) {
       return;
     }
@@ -167,8 +167,12 @@ export function EditorShell(): React.JSX.Element {
               selectedIds={editor.state.document.selectedIds}
               pendingDraft={editor.state.document.pendingDraft}
               tool={editor.state.tool}
-              style={editor.state.style}
-              styleLineWidth={editor.state.style.lineWidth}
+              style={editor.style}
+              styleLineWidth={
+                editor.style.mode === "mark"
+                  ? editor.style.markup.strokeWidth
+                  : editor.style.lineWidth
+              }
               placingIds={editor.state.placingIds}
               onSelection={editor.setSelection}
               onPendingShape={editor.setPendingShape}
@@ -182,8 +186,9 @@ export function EditorShell(): React.JSX.Element {
 
         <aside className="grid auto-rows-max gap-4">
           <SettingsPanel
-            style={editor.state.style}
+            style={editor.style}
             hasSelection={editor.state.document.selectedIds.length > 0}
+            onStylePreviewChange={editor.setStylePreview}
             onStyleChange={editor.setStyle}
             onApplySelectionStyle={editor.applyStyleToSelection}
           />
@@ -193,6 +198,8 @@ export function EditorShell(): React.JSX.Element {
             selectedIds={editor.state.document.selectedIds}
             onSelectionChange={editor.setSelection}
             onDeleteSelected={editor.deleteSelected}
+            onBringToFront={editor.bringSelectionToFront}
+            onSendToBack={editor.sendSelectionToBack}
           />
         </aside>
       </div>

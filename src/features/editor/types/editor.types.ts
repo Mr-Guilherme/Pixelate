@@ -1,6 +1,9 @@
 export type ToolType = "select" | "rect" | "ellipse" | "line" | "freehand";
 
 export type RedactionMode = "pixelate" | "fill";
+export type ModeTab = "pixelate" | "solid" | "mark";
+export type StyleMode = RedactionMode | "mark";
+export type ObjectKind = "redaction" | "markup";
 
 export interface Point {
   x: number;
@@ -16,10 +19,16 @@ export interface FillParams {
   color: string;
 }
 
+export interface MarkupParams {
+  strokeColor: string;
+  strokeWidth: number;
+}
+
 export interface StyleParams {
-  mode: RedactionMode;
+  mode: StyleMode;
   pixelate: PixelateParams;
   fill: FillParams;
+  markup: MarkupParams;
   lineWidth: number;
 }
 
@@ -56,6 +65,7 @@ export type ShapeGeometry =
 
 export interface RedactionObject {
   id: string;
+  kind: ObjectKind;
   shape: ShapeGeometry;
   style: StyleParams;
   visible: boolean;

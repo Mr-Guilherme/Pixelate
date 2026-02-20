@@ -1,6 +1,6 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { ArrowDownToLine, ArrowUpToLine, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -23,27 +23,64 @@ function objectLabel(object: RedactionObject): string {
   return "Freehand";
 }
 
+function objectModeLabel(object: RedactionObject): string {
+  if (object.kind === "markup") {
+    return "mark";
+  }
+
+  if (object.style.mode === "fill") {
+    return "solid fill";
+  }
+
+  return "pixelate";
+}
+
 export function ObjectsPanel(params: {
   objects: RedactionObject[];
   selectedIds: string[];
   onSelectionChange: (ids: string[]) => void;
   onDeleteSelected: () => void;
+  onBringToFront: () => void;
+  onSendToBack: () => void;
 }): React.JSX.Element {
   const sorted = [...params.objects].reverse();
+  const hasSelection = params.selectedIds.length > 0;
 
   return (
     <Card className="h-full">
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle className="text-sm">Objects</CardTitle>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          disabled={!params.selectedIds.length}
-          onClick={params.onDeleteSelected}
-        >
-          <Trash2 className="size-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            disabled={!hasSelection}
+            onClick={params.onSendToBack}
+            title="Send to back"
+          >
+            <ArrowDownToLine className="size-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            disabled={!hasSelection}
+            onClick={params.onBringToFront}
+            title="Bring to front"
+          >
+            <ArrowUpToLine className="size-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            disabled={!hasSelection}
+            onClick={params.onDeleteSelected}
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <ScrollArea className="h-[220px] pr-3">
@@ -83,16 +120,14 @@ export function ObjectsPanel(params: {
                   <div className="flex items-center justify-between">
                     <span>{objectLabel(object)}</span>
                     <span className="text-xs text-muted-foreground">
-                      {object.style.mode}
+                      {objectModeLabel(object)}
                     </span>
                   </div>
                 </button>
               );
             })}
             {!sorted.length && (
-              <p className="text-xs text-muted-foreground">
-                No redaction objects yet.
-              </p>
+              <p className="text-xs text-muted-foreground">No objects yet.</p>
             )}
           </div>
         </ScrollArea>

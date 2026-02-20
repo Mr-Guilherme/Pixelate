@@ -8,6 +8,7 @@ import {
 } from "@/features/editor/lib/pixelate";
 import type {
   PreferencesV1,
+  StyleMode,
   StyleParams,
   ToolType,
 } from "@/features/editor/types/editor.types";
@@ -22,93 +23,167 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function isStyle(style: unknown): style is StyleParams {
-  if (!style || typeof style !== "object") {
-    return false;
-  }
-
-  const candidate = style as Partial<StyleParams>;
-
-  if (!candidate.mode || !["pixelate", "fill"].includes(candidate.mode)) {
-    return false;
-  }
-
-  if (!candidate.pixelate || typeof candidate.pixelate !== "object") {
-    return false;
-  }
-
-  if (!candidate.fill || typeof candidate.fill !== "object") {
-    return false;
-  }
-
-  return true;
+function isHexColor(value: unknown): value is string {
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
 }
 
-function normalizeStyle(style: StyleParams): StyleParams {
+function readNumber(value: unknown): number | null {
+  const normalized = typeof value === "number" ? value : Number(value);
+
+  if (!Number.isFinite(normalized)) {
+    return null;
+  }
+
+  return normalized;
+}
+
+function normalizeRounded(params: {
+  value: unknown;
+  min: number;
+  max: number;
+  fallback: number;
+}): number {
+  const parsed = readNumber(params.value);
+
+  if (parsed === null) {
+    return params.fallback;
+  }
+
+  return clamp(Math.round(parsed), params.min, params.max);
+}
+
+function normalizeDecimal(params: {
+  value: unknown;
+  min: number;
+  max: number;
+  fallback: number;
+}): number {
+  const parsed = readNumber(params.value);
+
+  if (parsed === null) {
+    return params.fallback;
+  }
+
+  return clamp(parsed, params.min, params.max);
+}
+
+function normalizeMode(mode: unknown): StyleMode {
+  if (mode === "pixelate") {
+    return "pixelate";
+  }
+
+  if (mode === "mark") {
+    return "mark";
+  }
+
+  if (mode === "fill" || mode === "solid") {
+    return "fill";
+  }
+
+  return DEFAULT_PREFERENCES.defaultStyle.mode;
+}
+
+function normalizeStyle(style: unknown): StyleParams {
+  const defaults = DEFAULT_PREFERENCES.defaultStyle;
+  const candidate =
+    style && typeof style === "object"
+      ? (style as Partial<StyleParams>)
+      : ({} as Partial<StyleParams>);
+  const pixelate =
+    candidate.pixelate && typeof candidate.pixelate === "object"
+      ? candidate.pixelate
+      : defaults.pixelate;
+  const fill =
+    candidate.fill && typeof candidate.fill === "object"
+      ? candidate.fill
+      : defaults.fill;
+  const markup =
+    candidate.markup && typeof candidate.markup === "object"
+      ? candidate.markup
+      : defaults.markup;
   const bounds = getPixelateBlockSizeBounds();
 
   return {
-    mode: style.mode,
+    mode: normalizeMode(candidate.mode),
     pixelate: {
       blockSize: clamp(
-        clampPixelateBlockSize(style.pixelate.blockSize),
+        clampPixelateBlockSize(
+          normalizeRounded({
+            value: pixelate.blockSize,
+            min: bounds.min,
+            max: bounds.max,
+            fallback: defaults.pixelate.blockSize,
+          }),
+        ),
         bounds.min,
         bounds.max,
       ),
-      alpha: clamp(style.pixelate.alpha, 0.1, 1),
+      alpha: normalizeDecimal({
+        value: pixelate.alpha,
+        min: 0.1,
+        max: 1,
+        fallback: defaults.pixelate.alpha,
+      }),
     },
     fill: {
-      color: /^#[0-9a-f]{6}$/i.test(style.fill.color)
-        ? style.fill.color
-        : DEFAULT_PREFERENCES.defaultStyle.fill.color,
+      color: isHexColor(fill.color) ? fill.color : defaults.fill.color,
     },
-    lineWidth: clamp(Math.round(style.lineWidth), 1, 200),
+    markup: {
+      strokeColor: isHexColor(markup.strokeColor)
+        ? markup.strokeColor
+        : defaults.markup.strokeColor,
+      strokeWidth: normalizeRounded({
+        value: markup.strokeWidth,
+        min: 1,
+        max: 128,
+        fallback: defaults.markup.strokeWidth,
+      }),
+    },
+    lineWidth: normalizeRounded({
+      value: candidate.lineWidth,
+      min: 1,
+      max: 200,
+      fallback: defaults.lineWidth,
+    }),
   };
 }
 
-function isPreferencesV1(value: unknown): value is PreferencesV1 {
-  if (!value || typeof value !== "object") {
-    return false;
+function toPreferences(raw: unknown): PreferencesV1 {
+  if (!raw || typeof raw !== "object") {
+    return {
+      version: 1,
+      defaultTool: DEFAULT_PREFERENCES.defaultTool,
+      defaultStyle: normalizeStyle(DEFAULT_PREFERENCES.defaultStyle),
+    };
   }
 
-  const candidate = value as Partial<PreferencesV1>;
+  const candidate = raw as Partial<PreferencesV1>;
 
-  if (candidate.version !== 1) {
-    return false;
-  }
-
-  if (!isStyle(candidate.defaultStyle)) {
-    return false;
-  }
-
-  return isValidTool(candidate.defaultTool);
+  return {
+    version: 1,
+    defaultTool: isValidTool(candidate.defaultTool)
+      ? candidate.defaultTool
+      : DEFAULT_PREFERENCES.defaultTool,
+    defaultStyle: normalizeStyle(candidate.defaultStyle),
+  };
 }
 
 export function loadPreferences(): PreferencesV1 {
   if (typeof window === "undefined") {
-    return DEFAULT_PREFERENCES;
+    return toPreferences(DEFAULT_PREFERENCES);
   }
 
   const raw = window.localStorage.getItem(STORAGE_KEY_PREFERENCES);
 
   if (!raw) {
-    return DEFAULT_PREFERENCES;
+    return toPreferences(DEFAULT_PREFERENCES);
   }
 
   try {
     const parsed = JSON.parse(raw) as unknown;
-
-    if (!isPreferencesV1(parsed)) {
-      return DEFAULT_PREFERENCES;
-    }
-
-    return {
-      version: 1,
-      defaultTool: parsed.defaultTool,
-      defaultStyle: normalizeStyle(parsed.defaultStyle),
-    };
+    return toPreferences(parsed);
   } catch {
-    return DEFAULT_PREFERENCES;
+    return toPreferences(DEFAULT_PREFERENCES);
   }
 }
 
@@ -119,7 +194,9 @@ export function savePreferences(preferences: PreferencesV1): void {
 
   const payload: PreferencesV1 = {
     version: 1,
-    defaultTool: preferences.defaultTool,
+    defaultTool: isValidTool(preferences.defaultTool)
+      ? preferences.defaultTool
+      : DEFAULT_PREFERENCES.defaultTool,
     defaultStyle: normalizeStyle(preferences.defaultStyle),
   };
 

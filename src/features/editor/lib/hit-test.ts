@@ -1,12 +1,34 @@
 import {
   getHandlePoints,
   getShapeBounds,
+  shapeToPath,
 } from "@/features/editor/lib/geometry";
+import { getObjectStrokeWidth } from "@/features/editor/lib/object-style";
 import type {
   HitResult,
   Point,
   RedactionObject,
 } from "@/features/editor/types/editor.types";
+
+let hitCanvasContext: CanvasRenderingContext2D | null | undefined;
+
+function getHitCanvasContext(): CanvasRenderingContext2D | null {
+  if (hitCanvasContext !== undefined) {
+    return hitCanvasContext;
+  }
+
+  if (typeof document === "undefined") {
+    hitCanvasContext = null;
+    return hitCanvasContext;
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 1;
+  hitCanvasContext = canvas.getContext("2d");
+
+  return hitCanvasContext;
+}
 
 function pointInRect(params: {
   point: Point;
@@ -104,6 +126,24 @@ function isPointOnShape(params: {
   point: Point;
   object: RedactionObject;
 }): boolean {
+  if (params.object.kind === "markup") {
+    const context = getHitCanvasContext();
+
+    if (!context) {
+      return false;
+    }
+
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.lineWidth = Math.max(2, getObjectStrokeWidth(params.object) + 10);
+
+    return context.isPointInStroke(
+      shapeToPath({ shape: params.object.shape }),
+      params.point.x,
+      params.point.y,
+    );
+  }
+
   const { shape } = params.object;
 
   if (shape.type === "rect") {

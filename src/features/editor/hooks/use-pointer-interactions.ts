@@ -10,6 +10,7 @@ import {
   updateObjectShape,
 } from "@/features/editor/lib/geometry";
 import { hitTestHandles, hitTestObjects } from "@/features/editor/lib/hit-test";
+import { modeToObjectKind } from "@/features/editor/lib/object-style";
 import { toImagePoint } from "@/features/editor/lib/render";
 import type {
   CommandType,
@@ -346,6 +347,7 @@ export function usePointerInteractions(params: {
       const pendingStyle = params.pendingDraft?.style ?? params.style;
       const committedDraft = {
         id: crypto.randomUUID(),
+        kind: params.pendingDraft?.kind ?? modeToObjectKind(pendingStyle.mode),
         shape: structuredClone(session.draftShape),
         style: structuredClone(pendingStyle),
         visible: true,

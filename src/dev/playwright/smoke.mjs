@@ -62,6 +62,115 @@ const PIXELATE_CASE = {
   },
 };
 
+const MARKUP_CASE = {
+  name: "markup",
+  file: path.join(workspaceRoot, "tests", "fixtures", "wide-image.png"),
+  width: 1200,
+  height: 600,
+};
+
+async function clickModeTab(page, name) {
+  const tab = page.getByRole("tab", { name });
+
+  if (await tab.count()) {
+    await tab.first().click();
+    return;
+  }
+
+  await page.getByRole("button", { name }).click();
+}
+
+async function assertModeTabsStable(page, contextLabel) {
+  const labels = ["Pixelate", "Solid Fill", "Mark"];
+
+  for (const label of labels) {
+    const tab = page.getByRole("tab", { name: label });
+
+    if (!(await tab.count())) {
+      throw new Error(`${contextLabel} missing mode tab: ${label}`);
+    }
+
+    if (!(await tab.first().isVisible())) {
+      throw new Error(`${contextLabel} mode tab is not visible: ${label}`);
+    }
+  }
+
+  const selectCount = await page.evaluate(() => {
+    const settingsCard = Array.from(
+      document.querySelectorAll('[data-slot="card"]'),
+    ).find((card) => card.textContent?.includes("Redaction Settings"));
+
+    if (!settingsCard) {
+      throw new Error("Settings panel card not found.");
+    }
+
+    return settingsCard.querySelectorAll("select").length;
+  });
+
+  if (selectCount !== 0) {
+    throw new Error(
+      `${contextLabel} expected no select controls in settings panel, found ${selectCount}.`,
+    );
+  }
+}
+
+async function runModeTabsReloadCase(page) {
+  await page.goto(baseUrl, { waitUntil: "networkidle" });
+  await page.getByText("Redaction Settings").waitFor();
+  await assertModeTabsStable(page, "mode-tabs initial");
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByText("Redaction Settings").waitFor();
+  await assertModeTabsStable(page, "mode-tabs reload");
+}
+
+async function dragSliderThumb(page, slider) {
+  const thumb = slider.locator('[data-slot="slider-thumb"]').first();
+  const sliderBox = await slider.boundingBox();
+  const thumbBox = await thumb.boundingBox();
+
+  if (!sliderBox || !thumbBox) {
+    throw new Error("Slider bounds are unavailable.");
+  }
+
+  const y = thumbBox.y + thumbBox.height / 2;
+  const startX = thumbBox.x + thumbBox.width / 2;
+  const endX = sliderBox.x + sliderBox.width - 8;
+
+  await page.mouse.move(startX, y);
+  await page.mouse.down();
+  await page.mouse.move(endX, y, {
+    steps: 24,
+  });
+  await page.mouse.up();
+}
+
+async function runSliderCommitCase(page) {
+  await page.goto(baseUrl, { waitUntil: "networkidle" });
+  await page.getByText("Redaction Settings").waitFor();
+  await assertModeTabsStable(page, "slider-case initial");
+  await clickModeTab(page, "Pixelate");
+  const initial = await page.getByTestId("blur-intensity-input").inputValue();
+
+  const slider = page.locator('[data-slot="slider"]').first();
+  await dragSliderThumb(page, slider);
+
+  await page.waitForTimeout(200);
+  const committed = await page.getByTestId("blur-intensity-input").inputValue();
+
+  if (!committed.trim() || committed === initial) {
+    throw new Error("Slider drag did not update blur intensity value.");
+  }
+
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByText("Redaction Settings").waitFor();
+  await assertModeTabsStable(page, "slider-case reload");
+  const persisted = await page.getByTestId("blur-intensity-input").inputValue();
+
+  if (!persisted.trim() || persisted === initial) {
+    throw new Error("Slider value was not persisted after reload.");
+  }
+}
+
 function toScreenPoint(bounds, normalizedPoint) {
   return {
     x: bounds.left + normalizedPoint.x * bounds.width,
@@ -349,7 +458,7 @@ async function runCase(page, testCase, screenshotPath) {
     .setInputFiles(testCase.file);
 
   await page.getByText("Redaction Settings").waitFor();
-  await page.getByRole("button", { name: "Solid Fill" }).click();
+  await clickModeTab(page, "Solid Fill");
   await page.locator('input[type="color"]').waitFor();
 
   const hexInput = page.locator('input[type="text"]').first();
@@ -412,7 +521,7 @@ async function runPixelateCase(page) {
     .setInputFiles(PIXELATE_CASE.file);
 
   await page.getByText("Redaction Settings").waitFor();
-  await page.getByRole("button", { name: "Pixelate" }).click();
+  await clickModeTab(page, "Pixelate");
   await page.getByTestId("blur-intensity-input").fill("72");
   await page.getByTestId("blur-intensity-input").press("Enter");
   await page.getByTestId("blur-opacity-input").fill("100");
@@ -459,6 +568,55 @@ async function runPixelateCase(page) {
   });
 }
 
+async function runMarkupCase(page) {
+  await page.goto(baseUrl, { waitUntil: "networkidle" });
+  await page.getByText("Import an image to start censoring").waitFor();
+
+  await page
+    .getByRole("button", { name: "Import image area" })
+    .locator('input[type="file"]')
+    .setInputFiles(MARKUP_CASE.file);
+
+  await page.getByText("Redaction Settings").waitFor();
+  await clickModeTab(page, "Mark");
+  await page.getByRole("button", { name: "Rectangle" }).click();
+
+  const canvasMetrics = await getBaseCanvasMetrics(page);
+  const imageBounds = computeContainBounds({
+    canvasRect: canvasMetrics,
+    imageWidth: MARKUP_CASE.width,
+    imageHeight: MARKUP_CASE.height,
+  });
+
+  await drawRectInBounds({
+    page,
+    bounds: imageBounds,
+    start: { x: 0.2, y: 0.2 },
+    end: { x: 0.5, y: 0.45 },
+  });
+
+  await page.locator('input[type="color"]').first().fill("#22c55e");
+  await page.getByTestId("mark-stroke-width-input").fill("14");
+  await page.getByTestId("mark-stroke-width-input").press("Enter");
+  await page.getByRole("button", { name: "Ellipse" }).click();
+
+  await drawRectInBounds({
+    page,
+    bounds: imageBounds,
+    start: { x: 0.52, y: 0.28 },
+    end: { x: 0.84, y: 0.62 },
+  });
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export PNG" }).click();
+  const download = await downloadPromise;
+  const exportPath = path.join(
+    outputDir,
+    `smoke-export-${MARKUP_CASE.name}.png`,
+  );
+  await download.saveAs(exportPath);
+}
+
 async function run() {
   await mkdir(outputDir, { recursive: true });
   await mkdir(docsDir, { recursive: true });
@@ -470,6 +628,8 @@ async function run() {
   });
   const page = await context.newPage();
 
+  await runModeTabsReloadCase(page);
+  await runSliderCommitCase(page);
   await runCase(
     page,
     CASES[0],
@@ -477,6 +637,7 @@ async function run() {
   );
   await runCase(page, CASES[1]);
   await runPixelateCase(page);
+  await runMarkupCase(page);
 
   await context.close();
   await browser.close();
